@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Wordle V3 Deluxe</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: system-ui;
+            background: linear-gradient(135deg, #0f172a, #1e293b);
+            color: white;
+            text-align: center
+        }
+
+        .container {
+            max-width: 900px;
+            margin: auto;
+            padding: 20px
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, .08);
+            backdrop-filter: blur(10px);
+            padding: 12px;
+            border-radius: 16px;
+            margin: 10px
+        }
+
+        #stats {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap
+        }
+
+        #board {
+            display: grid;
+            grid-template-columns: repeat(5, 70px);
+            gap: 8px;
+            justify-content: center;
+            margin: 20px
+        }
+
+        .tile {
+            width: 70px;
+            height: 70px;
+            border: 2px solid #475569;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: bold;
+            transition: .6s
+        }
+
+        .flip {
+            transform: rotateX(360deg)
+        }
+
+        .correct {
+            background: #22c55e
+        }
+
+        .present {
+            background: #eab308
+        }
+
+        .absent {
+            background: #475569
+        }
+
+        .shake {
+            animation: shake .3s
+        }
+
+        @keyframes shake {
+            25% {
+                transform: translateX(-5px)
+            }
+
+            50% {
+                transform: translateX(5px)
+            }
+
+            75% {
+                transform: translateX(-5px)
+            }
+        }
+
+        .row {
+            display: flex;
+            justify-content: center;
+            gap: 5px;
+            margin: 4px
+        }
+
+        .key {
+            padding: 12px;
+            background: #334155;
+            border-radius: 8px;
+            cursor: pointer;
+            user-select: none
+        }
+
+        button {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            margin: 5px
+        }
+
+        #answer {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin: 10px;
+            color: #4ade80
+        }
+
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            pointer-events: none
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="confetti"></canvas>
+    <div class="container">
+        <h1>🎯 Wordle V3 Deluxe</h1>
+
+        <div id="stats">
+            <div class="panel">High Score: <span id="hs">0</span></div>
+            <div class="panel">Wins: <span id="wins">0</span></div>
+            <div class="panel">Streak: <span id="streak">0</span></div>
+        </div>
+
+        <div id="board"></div>
+        <div id="answer"></div>
+
+        <div id="keyboard"></div>
+
+        <button id="newGame">🔄 New Game</button>
+        <button id="musicBtn">🎵 Music</button>
+        <button id="themeBtn">🌙 Theme</button>
+
+        <audio id="bgm" loop>
+            <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg">
+        </audio>
+    </div>
+
+    <script>
+        const WORDS = ["APPLE", "GRAPE", "HOUSE", "BRICK", "TRAIN", "SMILE", "LIGHT", "WORLD", "CHAIR", "PLANT", "MOUSE", "STONE", "CLOUD", "WATER", "BEACH", "SHARE", "HEART", "GHOST", "POWER", "BRAIN"];
+
+        let target, row, col, current, over;
+
+        const board = document.getElementById("board");
+
+        function buildBoard() {
+            board.innerHTML = "";
+            for (let i = 0; i < 30; i++) {
+                let d = document.createElement("div");
+                d.className = "tile";
+                board.appendChild(d);
+            }
+        }
+
+        function newGame() {
+            target = WORDS[Math.floor(Math.random() * WORDS.length)];
+            row = 0; col = 0; current = ""; over = false;
+            document.getElementById("answer").textContent = "";
+            buildBoard();
+            resetKeyboard();
+        }
+        buildBoard();
+
+        const keyboard = document.getElementById("keyboard");
+        ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"].forEach(r => {
+            let div = document.createElement("div");
+            div.className = "row";
+            [...r].forEach(ch => {
+                let k = document.createElement("div");
+                k.className = "key";
+                k.textContent = ch;
+                k.onclick = () => addLetter(ch);
+                div.appendChild(k);
+            });
+            keyboard.appendChild(div);
+        });
+
+        function addLetter(l) {
+            if (over || current.length >= 5) return;
+            board.children[row * 5 + col].textContent = l;
+            current += l;
+            col++;
+        }
+
+        function backspace() {
+            if (over || col === 0) return;
+            col--;
+            current = current.slice(0, -1);
+            board.children[row * 5 + col].textContent = "";
+        }
+
+        function submitGuess() {
+            if (over) return;
+
+            if (current.length !== 5) {
+                for (let i = 0; i < 5; i++) {
+                    board.children[row * 5 + i].classList.add("shake");
+                }
+                setTimeout(() => {
+                    document.querySelectorAll(".shake").forEach(x => x.classList.remove("shake"));
+                }, 300);
+                return;
+            }
+
+            for (let i = 0; i < 5; i++) {
+                let tile = board.children[row * 5 + i];
+                tile.classList.add("flip");
+
+                if (current[i] === target[i]) tile.classList.add("correct");
+                else if (target.includes(current[i])) tile.classList.add("present");
+                else tile.classList.add("absent");
+            }
+
+            if (current === target) { win(); return; }
+
+            row++; col = 0; current = "";
+
+            if (row === 6) lose();
+        }
+
+        function highlightWord(word) {
+            document.querySelectorAll(".key").forEach(key => {
+                if (word.includes(key.textContent)) {
+                    key.style.background = "#22c55e";
+                }
+            });
+        }
+
+        function resetKeyboard() {
+            document.querySelectorAll(".key").forEach(k => {
+                k.style.background = "#334155";
+            });
+        }
+
+        function win() {
+            over = true;
+            let score = (6 - row) * 100;
+            let hs = +localStorage.hs || 0;
+            let wins = +localStorage.wins || 0;
+            let streak = +localStorage.streak || 0;
+
+            wins++; streak++;
+            if (score > hs) { hs = score; localStorage.hs = hs; }
+
+            localStorage.wins = wins;
+            localStorage.streak = streak;
+
+            updateStats();
+            document.getElementById("answer").textContent = "✅ Answer: " + target;
+            highlightWord(target);
+            confetti();
+        }
+
+        function lose() {
+            over = true;
+            localStorage.streak = 0;
+            updateStats();
+            document.getElementById("answer").textContent = "❌ The word was: " + target;
+            highlightWord(target);
+        }
+
+        function updateStats() {
+            hs.textContent = localStorage.hs || 0;
+            wins.textContent = localStorage.wins || 0;
+            streak.textContent = localStorage.streak || 0;
+        }
+        updateStats();
+
+        document.addEventListener("keydown", e => {
+            if (e.key === "Enter") submitGuess();
+            else if (e.key === "Backspace") backspace();
+            else {
+                let k = e.key.toUpperCase();
+                if (/^[A-Z]$/.test(k)) addLetter(k);
+            }
+        });
+
+        document.getElementById("newGame").onclick = newGame;
+
+        document.getElementById("musicBtn").onclick = () => {
+            let a = document.getElementById("bgm");
+            if (a.paused) a.play(); else a.pause();
+        };
+
+        let dark = true;
+        document.getElementById("themeBtn").onclick = () => {
+            dark = !dark;
+            document.body.style.background = dark ?
+                "linear-gradient(135deg,#0f172a,#1e293b)" :
+                "linear-gradient(135deg,#f8fafc,#cbd5e1)";
+            document.body.style.color = dark ? "white" : "black";
+        };
+
+        function confetti() {
+            const c = document.getElementById("confetti");
+            const ctx = c.getContext("2d");
+            c.width = innerWidth; c.height = innerHeight;
+            let parts = [];
+            for (let i = 0; i < 150; i++) {
+                parts.push({ x: Math.random() * c.width, y: -20 * Math.random(), vy: 2 + Math.random() * 4 });
+            }
+            let anim = setInterval(() => {
+                ctx.clearRect(0, 0, c.width, c.height);
+                parts.forEach(p => {
+                    p.y += p.vy;
+                    ctx.fillRect(p.x, p.y, 4, 4);
+                });
+            }, 16);
+            setTimeout(() => clearInterval(anim), 3000);
+        }
+
+        newGame();
+    </script>
+</body>
+
+</html>
